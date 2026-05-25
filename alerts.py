@@ -59,8 +59,39 @@ class AlertClient:
 
     def _post(self, payload, prefix: str):
         try:
+            text = payload.get("content", {}).get("text")
+            if isinstance(text, str) and len(text) > 3500:
+                for chunk in chunk_text(text):
+                    chunk_payload = {
+                        "msg_type": "text",
+                        "content": {"text": chunk},
+                    }
+                    response = requests.post(self.webhook, json=chunk_payload, timeout=15)
+                    print(f"[{prefix} STATUS] {response.status_code}", flush=True)
+                    print(f"[{prefix} RESPONSE] {response.text}", flush=True)
+                return
+
             response = requests.post(self.webhook, json=payload, timeout=15)
             print(f"[{prefix} STATUS] {response.status_code}", flush=True)
             print(f"[{prefix} RESPONSE] {response.text}", flush=True)
         except Exception as exc:
             print(f"[{prefix} ERROR] {exc}", flush=True)
+
+
+def chunk_text(message: str, max_chars: int = 3500):
+    if len(message) <= max_chars:
+        return [message]
+    chunks = []
+    current = []
+    current_len = 0
+    for block in message.split("\n\n"):
+        block_len = len(block) + 2
+        if current and current_len + block_len > max_chars:
+            chunks.append("\n\n".join(current))
+            current = []
+            current_len = 0
+        current.append(block)
+        current_len += block_len
+    if current:
+        chunks.append("\n\n".join(current))
+    return chunks

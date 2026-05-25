@@ -6,6 +6,8 @@ from alerts import AlertClient
 from browser import BrowserManager
 from config import load_settings
 from monitors.live_monitor import LiveMonitor
+from monitors.market_outcome_monitor import MarketOutcomeMonitor
+from monitors.product_both_monitor import ProductBothMonitor
 from monitors.sports_today_monitor import SportsTodayMonitor
 from screenshot import Screenshotter, cleanup_old_screenshots
 
@@ -18,7 +20,8 @@ def main():
     print("[APP] gotobet monitor starting", flush=True)
     print(f"[APP] live interval={settings.live_check_interval}s", flush=True)
     print(f"[APP] today interval={settings.today_check_interval}s", flush=True)
-    print(f"[APP] sport_ids={','.join(settings.sport_ids)}", flush=True)
+    print(f"[APP] today sport source={settings.today_sport_ids_source}", flush=True)
+    print(f"[APP] fallback sport_ids={','.join(settings.sport_ids)}", flush=True)
 
     with sync_playwright() as playwright:
         browser_manager = BrowserManager(playwright, settings)
@@ -29,9 +32,29 @@ def main():
             alerts,
             screenshotter,
         )
+        scheduled_monitors = [
+            {"name": "live", "monitor": live_monitor, "next_at": 0.0},
+            {"name": "today", "monitor": today_monitor, "next_at": 0.0},
+        ]
+        if settings.enable_market_outcome_monitor:
+            scheduled_monitors.append(
+                {
+                    "name": "market_outcome",
+                    "monitor": MarketOutcomeMonitor(settings, alerts),
+                    "next_at": 0.0,
+                }
+            )
+            print("[APP] market/outcome monitor enabled", flush=True)
+        if settings.enable_product_both_monitor:
+            scheduled_monitors.append(
+                {
+                    "name": "product_both",
+                    "monitor": ProductBothMonitor(settings, alerts),
+                    "next_at": 0.0,
+                }
+            )
+            print("[APP] product both monitor enabled", flush=True)
 
-        next_live_at = 0.0
-        next_today_at = 0.0
         next_cleanup_at = 0.0
 
         try:
@@ -41,13 +64,10 @@ def main():
                 if recycled:
                     live_monitor.close_page()
 
-                if now >= next_live_at:
-                    run_monitor("live", live_monitor.run_once)
-                    next_live_at = time.time() + settings.live_check_interval
-
-                if now >= next_today_at:
-                    run_monitor("today", today_monitor.run_once)
-                    next_today_at = time.time() + settings.today_check_interval
+                for item in scheduled_monitors:
+                    if now >= item["next_at"]:
+                        run_monitor(item["name"], item["monitor"].run_once)
+                        item["next_at"] = time.time() + item["monitor"].interval
 
                 if now >= next_cleanup_at:
                     cleanup_old_screenshots(
@@ -56,7 +76,8 @@ def main():
                     )
                     next_cleanup_at = time.time() + 3600
 
-                sleep_for = max(1.0, min(next_live_at, next_today_at, next_cleanup_at) - time.time())
+                next_monitor_at = min(item["next_at"] for item in scheduled_monitors)
+                sleep_for = max(1.0, min(next_monitor_at, next_cleanup_at) - time.time())
                 time.sleep(sleep_for)
         finally:
             live_monitor.close_page()

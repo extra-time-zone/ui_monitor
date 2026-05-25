@@ -1,6 +1,9 @@
 import time
 
+import requests
+
 from config import sport_name, today_range_ms
+from gotobet_api import build_headers, fetch_top_sports
 from parsers import check_all_markets_down, collect_all_matches, scheduled_time_is_stale
 from state import MatchStateStore
 
@@ -23,12 +26,34 @@ class SportsTodayMonitor:
         return self.settings.today_check_interval
 
     def run_once(self):
-        for sport_id in self.settings.sport_ids:
-            self._run_sport_once(sport_id)
+        sports = self._sports_to_monitor()
+        print(
+            "[TODAY] sports="
+            + ",".join(f"{item['sport_id']}:{item['name']}" for item in sports),
+            flush=True,
+        )
+        for sport in sports:
+            self._run_sport_once(sport["sport_id"], sport["name"])
 
-    def _run_sport_once(self, sport_id: str):
+    def _sports_to_monitor(self):
+        if self.settings.today_sport_ids_source == "top":
+            try:
+                headers = build_headers(self.settings)
+                with requests.Session() as session:
+                    sports = fetch_top_sports(session, self.settings, headers)
+                if sports:
+                    return sports
+                print("[TODAY] top sports API returned empty, using SPORT_IDS fallback", flush=True)
+            except Exception as exc:
+                print(f"[TODAY] top sports API failed: {exc}", flush=True)
+
+        return [
+            {"sport_id": sport_id, "name": sport_name(sport_id)}
+            for sport_id in self.settings.sport_ids
+        ]
+
+    def _run_sport_once(self, sport_id: str, name: str):
         now = time.time()
-        name = sport_name(sport_id)
         url = self._today_url(sport_id)
         page = self.browser_manager.new_page()
 
