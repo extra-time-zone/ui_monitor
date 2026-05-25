@@ -1,10 +1,17 @@
 import time
+from datetime import datetime
 
 import requests
 
 from config import sport_name, today_range_ms
 from gotobet_api import build_headers, fetch_top_sports
-from parsers import check_all_markets_down, collect_all_matches, scheduled_time_is_stale
+from parsers import (
+    check_all_markets_down,
+    collect_all_matches,
+    has_missing_status_field,
+    has_negative_time,
+    scheduled_time_is_stale,
+)
 from state import MatchStateStore
 
 
@@ -20,6 +27,8 @@ class SportsTodayMonitor:
         }
         self.seen_alerts = set()
         self.market_down_rounds = {sport_id: 0 for sport_id in self.settings.sport_ids}
+        self.empty_page_rounds = {}
+        self.system_alerted_dates = {}
 
     @property
     def interval(self):
@@ -82,6 +91,7 @@ class SportsTodayMonitor:
                 normal_market_count,
                 unavailable_market_count,
             )
+            self._check_empty_page(sport_id, name, url, len(matches))
 
             store = self.states.setdefault(sport_id, MatchStateStore(f"today:{sport_id}"))
 
@@ -125,6 +135,10 @@ class SportsTodayMonitor:
                         f"reappeared_after: {reappeared_after}s\n"
                         f"reappear_count: {state['reappear_count']}"
                     )
+                elif reason == "negative_match_time":
+                    extra = f"negative_time: {match.get('negative_time') or '-'}"
+                elif reason == "missing_status_field":
+                    extra = "status_field: missing period/scheduled_time/minutes"
 
                 self.alerts.send_match_alert(match, reason, shot_path, extra)
                 self._print_alert(match, reason, shot_path)
@@ -174,6 +188,12 @@ class SportsTodayMonitor:
         )
 
         if rounds >= self.settings.today_market_down_threshold:
+            if not self._can_send_daily_system_alert(
+                f"TODAY_ALL_MARKETS_DOWN:{sport_id}"
+            ):
+                self.market_down_rounds[sport_id] = 0
+                return
+
             self.alerts.send_system_alert(
                 "TODAY_ALL_MARKETS_DOWN",
                 (
@@ -189,7 +209,42 @@ class SportsTodayMonitor:
             )
             self.market_down_rounds[sport_id] = 0
 
+    def _check_empty_page(self, sport_id, name, url, script_count):
+        if script_count > 0:
+            self.empty_page_rounds[sport_id] = 0
+            return
+
+        self.empty_page_rounds[sport_id] = self.empty_page_rounds.get(sport_id, 0) + 1
+        rounds = self.empty_page_rounds[sport_id]
+        print(
+            f"[TODAY PAGE NO MATCHES] sport_id={sport_id} rounds={rounds}",
+            flush=True,
+        )
+
+        if rounds < self.settings.today_empty_page_threshold:
+            return
+        if not self._can_send_daily_system_alert(f"TODAY_PAGE_NO_MATCHES:{sport_id}"):
+            self.empty_page_rounds[sport_id] = 0
+            return
+
+        self.alerts.send_system_alert(
+            "TODAY_PAGE_NO_MATCHES",
+            (
+                f"sport_id={sport_id}\n"
+                f"sport={name}\n"
+                f"today page parsed zero matches for {rounds} rounds\n"
+                f"url={url}"
+            ),
+        )
+        self.empty_page_rounds[sport_id] = 0
+
     def _should_alert(self, match, is_reappeared):
+        if has_negative_time(match):
+            return True, "negative_match_time"
+
+        if has_missing_status_field(match):
+            return True, "missing_status_field"
+
         if (
             match.get("scheduled_time")
             and match.get("minutes") is None
@@ -204,6 +259,13 @@ class SportsTodayMonitor:
             return True, "today_reappeared_match"
 
         return False, ""
+
+    def _can_send_daily_system_alert(self, key):
+        today = datetime.now().strftime("%Y-%m-%d")
+        if self.system_alerted_dates.get(key) == today:
+            return False
+        self.system_alerted_dates[key] = today
+        return True
 
     @staticmethod
     def _print_match(match):

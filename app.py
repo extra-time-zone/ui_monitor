@@ -22,6 +22,16 @@ def main():
     print(f"[APP] today interval={settings.today_check_interval}s", flush=True)
     print(f"[APP] today sport source={settings.today_sport_ids_source}", flush=True)
     print(f"[APP] fallback sport_ids={','.join(settings.sport_ids)}", flush=True)
+    print(
+        f"[APP] market/outcome detail monitor enabled="
+        f"{settings.enable_market_outcome_monitor}",
+        flush=True,
+    )
+    print(
+        f"[APP] live product rules detail monitor enabled="
+        f"{settings.enable_live_product_rules_monitor}",
+        flush=True,
+    )
 
     with sync_playwright() as playwright:
         browser_manager = BrowserManager(playwright, settings)
@@ -45,15 +55,15 @@ def main():
                 }
             )
             print("[APP] market/outcome monitor enabled", flush=True)
-        if settings.enable_product_both_monitor:
+        if settings.enable_live_product_rules_monitor:
             scheduled_monitors.append(
                 {
-                    "name": "product_both",
-                    "monitor": ProductBothMonitor(settings, alerts),
+                    "name": "live_product_rules",
+                    "monitor": ProductBothMonitor(settings, alerts, browser_manager),
                     "next_at": 0.0,
                 }
             )
-            print("[APP] product both monitor enabled", flush=True)
+            print("[APP] live product rules monitor enabled", flush=True)
 
         next_cleanup_at = 0.0
 

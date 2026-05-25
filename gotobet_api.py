@@ -93,7 +93,7 @@ def fetch_sports(session: requests.Session, settings, headers: Dict[str, str]) -
             for sport_id in settings.gotobet_api_sport_ids
         ]
 
-    url = f"{settings.gotobet_service_api_base_url.rstrip('/')}/v1/menu/sports"
+    url = settings.gotobet_top_sports_url
     data = request_json(session, url, headers)
     return extract_sports(data or {})
 
@@ -101,7 +101,7 @@ def fetch_sports(session: requests.Session, settings, headers: Dict[str, str]) -
 def fetch_top_sports(session: requests.Session, settings, headers: Dict[str, str]) -> List[dict]:
     data = request_json(
         session,
-        settings.today_top_sports_url,
+        settings.gotobet_top_sports_url,
         headers,
         timeout=max(3, settings.api_detail_timeout),
         retries=max(0, settings.api_detail_retries),

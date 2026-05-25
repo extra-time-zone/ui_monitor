@@ -1,9 +1,12 @@
 import time
+from datetime import datetime
 
 from parsers import (
     check_all_markets_down,
     collect_all_matches,
     get_page_counts,
+    has_missing_status_field,
+    has_negative_time,
     scheduled_time_is_stale,
 )
 from state import MatchStateStore
@@ -19,6 +22,8 @@ class LiveMonitor:
         self.seen_alerts = set()
         self.count_mismatch_rounds = 0
         self.market_down_rounds = 0
+        self.empty_page_rounds = 0
+        self.system_alerted_dates = {}
         self.page = None
 
     @property
@@ -77,6 +82,7 @@ class LiveMonitor:
             normal_market_count,
             unavailable_market_count,
         )
+        self._check_empty_page(top_count, right_count, script_count)
 
         for match in matches:
             match_id = match["match_id"]
@@ -113,6 +119,10 @@ class LiveMonitor:
                     f"reappeared_after: {reappeared_after}s\n"
                     f"reappear_count: {state['reappear_count']}"
                 )
+            elif reason == "negative_match_time":
+                extra = f"negative_time: {match.get('negative_time') or '-'}"
+            elif reason == "missing_status_field":
+                extra = "status_field: missing period/scheduled_time/minutes"
 
             self.alerts.send_match_alert(match, reason, shot_path, extra)
             self._print_alert(match, reason, shot_path)
@@ -174,7 +184,44 @@ class LiveMonitor:
             )
             self.market_down_rounds = 0
 
+    def _check_empty_page(self, top_count, right_count, script_count):
+        expected = max(
+            [count for count in (top_count, right_count) if count is not None],
+            default=0,
+        )
+        if script_count > 0 or expected <= 0:
+            self.empty_page_rounds = 0
+            return
+
+        self.empty_page_rounds += 1
+        print(f"[LIVE PAGE NO MATCHES] rounds={self.empty_page_rounds}", flush=True)
+
+        if self.empty_page_rounds < self.settings.live_empty_page_threshold:
+            return
+        if not self._can_send_daily_system_alert("LIVE_PAGE_NO_MATCHES"):
+            self.empty_page_rounds = 0
+            return
+
+        self.alerts.send_system_alert(
+            "LIVE_PAGE_NO_MATCHES",
+            (
+                "live page parsed zero matches while page counters indicate matches\n"
+                f"top_live_count={top_count}\n"
+                f"right_matches_count={right_count}\n"
+                f"script_parsed_count={script_count}\n"
+                f"rounds={self.empty_page_rounds}\n"
+                f"url={self.settings.url}"
+            ),
+        )
+        self.empty_page_rounds = 0
+
     def _should_alert(self, match, is_new_match, is_reappeared):
+        if has_negative_time(match):
+            return True, "negative_match_time"
+
+        if has_missing_status_field(match):
+            return True, "missing_status_field"
+
         if scheduled_time_is_stale(
             match.get("scheduled_time"),
             self.settings.scheduled_stale_grace_minutes,
@@ -195,6 +242,13 @@ class LiveMonitor:
             return True, "reappeared_match"
 
         return False, ""
+
+    def _can_send_daily_system_alert(self, key):
+        today = datetime.now().strftime("%Y-%m-%d")
+        if self.system_alerted_dates.get(key) == today:
+            return False
+        self.system_alerted_dates[key] = today
+        return True
 
     @staticmethod
     def _print_match(match):

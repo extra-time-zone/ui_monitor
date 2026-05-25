@@ -135,6 +135,8 @@ def parse_match(item, sport_id=None, sport_name=None):
     period = ""
     minutes = None
     scheduled_time = ""
+    clock_time = ""
+    negative_time = ""
 
     for line in after:
         if re.search(
@@ -155,6 +157,22 @@ def parse_match(item, sport_id=None, sport_name=None):
         if minute_match:
             minutes = int(minute_match.group(1))
 
+        negative_match = re.search(r"-\d{1,3}:\d{2}|-\d+'", line)
+        if negative_match:
+            negative_time = negative_match.group(0)
+
+        clock_match = re.search(r"(?<!-)\b\d{1,3}:\d{2}\b", line)
+        if clock_match:
+            clock_time = clock_match.group(0)
+
+    status_missing = (
+        not period
+        and not scheduled_time
+        and minutes is None
+        and not clock_time
+        and not negative_time
+    )
+
     return {
         "match_id": item["match_id"],
         "title": title,
@@ -167,6 +185,9 @@ def parse_match(item, sport_id=None, sport_name=None):
         "period": period,
         "scheduled_time": scheduled_time,
         "minutes": minutes,
+        "clock_time": clock_time,
+        "negative_time": negative_time,
+        "status_missing": status_missing,
         "raw": raw,
     }
 
@@ -252,3 +273,13 @@ def scheduled_time_is_stale(scheduled_time: str, grace_minutes: int) -> bool:
     now = datetime.now()
     scheduled_at = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
     return (now - scheduled_at).total_seconds() >= grace_minutes * 60
+
+
+def has_negative_time(match) -> bool:
+    if match.get("negative_time"):
+        return True
+    return bool(re.search(r"-\d{1,3}:\d{2}|-\d+'", match.get("raw") or ""))
+
+
+def has_missing_status_field(match) -> bool:
+    return bool(match.get("status_missing"))

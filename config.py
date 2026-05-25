@@ -61,6 +61,7 @@ class Settings:
     market_down_threshold: int = 3
     count_mismatch_threshold: int = 3
     scheduled_stale_grace_minutes: int = 5
+    live_empty_page_threshold: int = 3
 
     sport_ids: List[str] = field(default_factory=lambda: ["6046"])
     today_sport_ids_source: str = "top"
@@ -68,6 +69,7 @@ class Settings:
     today_check_interval: int = 60
     today_start_grace_minutes: int = 5
     today_market_down_threshold: int = 3
+    today_empty_page_threshold: int = 3
     today_missing_threshold: int = 3
     today_reappear_alert_seconds: int = 60
 
@@ -86,6 +88,7 @@ class Settings:
 
     gotobet_base_url: str = "https://gotobet.com"
     gotobet_service_api_base_url: str = "https://xp-service-api.gotobet.com"
+    gotobet_top_sports_url: str = "https://xp-service-api.gotobet.com/v1/menu/sports/top"
     gotobet_authorization_token: str = ""
     gotobet_api_sport_ids: List[str] = field(default_factory=list)
     api_detail_workers: int = 8
@@ -100,9 +103,9 @@ class Settings:
         default_factory=lambda: ["sports", "sports-live"]
     )
 
-    enable_product_both_monitor: bool = False
-    product_both_interval: int = 60
-    product_both_max_pages: int = 1
+    enable_live_product_rules_monitor: bool = False
+    product_rules_interval: int = 60
+    product_rules_max_pages: int = 1
 
 
 def load_settings() -> Settings:
@@ -122,6 +125,7 @@ def load_settings() -> Settings:
         market_down_threshold=env_int("MARKET_DOWN_THRESHOLD", 3),
         count_mismatch_threshold=env_int("COUNT_MISMATCH_THRESHOLD", 3),
         scheduled_stale_grace_minutes=env_int("SCHEDULED_STALE_GRACE_MINUTES", 5),
+        live_empty_page_threshold=env_int("LIVE_EMPTY_PAGE_THRESHOLD", 3),
         sport_ids=env_list("SPORT_IDS", "6046"),
         today_sport_ids_source=os.getenv("TODAY_SPORT_IDS_SOURCE", "top").strip().lower(),
         today_top_sports_url=os.getenv(
@@ -131,6 +135,7 @@ def load_settings() -> Settings:
         today_check_interval=env_int("TODAY_CHECK_INTERVAL", 60),
         today_start_grace_minutes=env_int("TODAY_START_GRACE_MINUTES", 5),
         today_market_down_threshold=env_int("TODAY_MARKET_DOWN_THRESHOLD", 3),
+        today_empty_page_threshold=env_int("TODAY_EMPTY_PAGE_THRESHOLD", 3),
         today_missing_threshold=env_int("TODAY_MISSING_THRESHOLD", 3),
         today_reappear_alert_seconds=env_int("TODAY_REAPPEAR_ALERT_SECONDS", 60),
         match_expire_seconds=env_int("MATCH_EXPIRE_SECONDS", 604800),
@@ -145,6 +150,13 @@ def load_settings() -> Settings:
             "GOTOBET_SERVICE_API_BASE_URL",
             "https://xp-service-api.gotobet.com",
         ),
+        gotobet_top_sports_url=os.getenv(
+            "GOTOBET_TOP_SPORTS_URL",
+            os.getenv(
+                "TODAY_TOP_SPORTS_URL",
+                "https://xp-service-api.gotobet.com/v1/menu/sports/top",
+            ),
+        ),
         gotobet_authorization_token=os.getenv("GOTOBET_AUTHORIZATION_TOKEN", ""),
         gotobet_api_sport_ids=env_list("GOTOBET_API_SPORT_IDS", ""),
         api_detail_workers=env_int("API_DETAIL_WORKERS", 8),
@@ -158,9 +170,18 @@ def load_settings() -> Settings:
             "MARKET_OUTCOME_STATUSES",
             "sports,sports-live",
         ),
-        enable_product_both_monitor=env_bool("ENABLE_PRODUCT_BOTH_MONITOR", False),
-        product_both_interval=env_int("PRODUCT_BOTH_INTERVAL", 60),
-        product_both_max_pages=env_int("PRODUCT_BOTH_MAX_PAGES", 1),
+        enable_live_product_rules_monitor=env_bool(
+            "ENABLE_LIVE_PRODUCT_RULES_MONITOR",
+            env_bool("ENABLE_PRODUCT_BOTH_MONITOR", False),
+        ),
+        product_rules_interval=env_int(
+            "PRODUCT_RULES_INTERVAL",
+            env_int("PRODUCT_BOTH_INTERVAL", 60),
+        ),
+        product_rules_max_pages=env_int(
+            "PRODUCT_RULES_MAX_PAGES",
+            env_int("PRODUCT_BOTH_MAX_PAGES", 1),
+        ),
     )
 
 
