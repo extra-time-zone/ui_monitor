@@ -5,6 +5,7 @@ from playwright.sync_api import sync_playwright
 from alerts import AlertClient
 from browser import BrowserManager
 from config import load_settings
+from dedupe import PersistentAlertDeduper
 from monitors.live_monitor import LiveMonitor
 from monitors.market_outcome_monitor import MarketOutcomeMonitor
 from monitors.product_both_monitor import ProductBothMonitor
@@ -16,6 +17,10 @@ def main():
     settings = load_settings()
     alerts = AlertClient(settings.lark_webhook)
     screenshotter = Screenshotter(settings)
+    deduper = PersistentAlertDeduper(
+        settings.alert_dedupe_file,
+        settings.alert_dedupe_ttl_seconds,
+    )
 
     print("[APP] gotobet monitor starting", flush=True)
     print(f"[APP] live interval={settings.live_check_interval}s", flush=True)
@@ -35,12 +40,19 @@ def main():
 
     with sync_playwright() as playwright:
         browser_manager = BrowserManager(playwright, settings)
-        live_monitor = LiveMonitor(settings, browser_manager, alerts, screenshotter)
+        live_monitor = LiveMonitor(
+            settings,
+            browser_manager,
+            alerts,
+            screenshotter,
+            deduper,
+        )
         today_monitor = SportsTodayMonitor(
             settings,
             browser_manager,
             alerts,
             screenshotter,
+            deduper,
         )
         scheduled_monitors = [
             {"name": "live", "monitor": live_monitor, "next_at": 0.0},

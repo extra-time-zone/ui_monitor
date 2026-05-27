@@ -218,7 +218,14 @@ class ProductBothMonitor:
         try:
             page.goto(url, wait_until="domcontentloaded", timeout=120000)
             page.wait_for_timeout(3000)
-            matches = collect_all_matches(page, sport_id=sport_id, sport_name=sport_name)
+            matches = collect_all_matches(
+                page,
+                sport_id=sport_id,
+                sport_name=sport_name,
+                max_scrolls=self.settings.collect_max_scrolls,
+                stable_round_limit=self.settings.collect_stable_rounds,
+                scroll_wait_ms=self.settings.collect_scroll_wait_ms,
+            )
             ids = {match["match_id"] for match in matches}
             print(
                 f"[LIVE PRODUCT RULES] today visible {sport_name}({sport_id}) "

@@ -16,16 +16,16 @@ from state import MatchStateStore
 
 
 class SportsTodayMonitor:
-    def __init__(self, settings, browser_manager, alerts, screenshotter):
+    def __init__(self, settings, browser_manager, alerts, screenshotter, deduper=None):
         self.settings = settings
         self.browser_manager = browser_manager
         self.alerts = alerts
         self.screenshotter = screenshotter
+        self.deduper = deduper
         self.states = {
             sport_id: MatchStateStore(f"today:{sport_id}")
             for sport_id in self.settings.sport_ids
         }
-        self.seen_alerts = set()
         self.market_down_rounds = {sport_id: 0 for sport_id in self.settings.sport_ids}
         self.empty_page_rounds = {}
         self.system_alerted_dates = {}
@@ -69,7 +69,14 @@ class SportsTodayMonitor:
         try:
             page.goto(url, wait_until="domcontentloaded", timeout=120000)
             page.wait_for_timeout(3000)
-            matches = collect_all_matches(page, sport_id=sport_id, sport_name=name)
+            matches = collect_all_matches(
+                page,
+                sport_id=sport_id,
+                sport_name=name,
+                max_scrolls=self.settings.collect_max_scrolls,
+                stable_round_limit=self.settings.collect_stable_rounds,
+                scroll_wait_ms=self.settings.collect_scroll_wait_ms,
+            )
             current_ids = set()
 
             all_markets_down, normal_market_count, unavailable_market_count = (
@@ -114,14 +121,10 @@ class SportsTodayMonitor:
                 display_period = (
                     match.get("period") or match.get("scheduled_time") or ""
                 )
-                key = (
-                    f"today:{sport_id}:{match_id}:{reason}:"
-                    f"{match.get('minutes')}:{display_period}"
-                )
-                if key in self.seen_alerts:
+                key = self._alert_key(sport_id, match, reason, display_period)
+                if not self._should_send_alert_key(key, now):
                     continue
 
-                self.seen_alerts.add(key)
                 shot_path = self.screenshotter.save(
                     page,
                     match_id,
@@ -266,6 +269,23 @@ class SportsTodayMonitor:
             return False
         self.system_alerted_dates[key] = today
         return True
+
+    def _should_send_alert_key(self, key, now):
+        if self.deduper is None:
+            return True
+        return self.deduper.should_alert(key, now)
+
+    @staticmethod
+    def _alert_key(sport_id, match, reason, display_period):
+        match_id = match["match_id"]
+        if reason in {
+            "today_reappeared_match",
+            "scheduled_match_not_started",
+            "negative_match_time",
+            "missing_status_field",
+        }:
+            return f"today:{sport_id}:{match_id}:{reason}"
+        return f"today:{sport_id}:{match_id}:{reason}:{display_period}"
 
     @staticmethod
     def _print_match(match):

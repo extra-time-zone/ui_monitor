@@ -192,7 +192,14 @@ def parse_match(item, sport_id=None, sport_name=None):
     }
 
 
-def collect_all_matches(page, sport_id=None, sport_name=None, max_scrolls=80):
+def collect_all_matches(
+    page,
+    sport_id=None,
+    sport_name=None,
+    max_scrolls=100,
+    stable_round_limit=12,
+    scroll_wait_ms=650,
+):
     collected = {}
 
     reset_scroll_to_top(page)
@@ -217,11 +224,11 @@ def collect_all_matches(page, sport_id=None, sport_name=None, max_scrolls=80):
 
         last_count = current_count
 
-        if stable_rounds >= 8:
+        if stable_rounds >= stable_round_limit:
             break
 
         scroll_down_once(page, 900)
-        page.wait_for_timeout(650)
+        page.wait_for_timeout(scroll_wait_ms)
 
     return list(collected.values())
 

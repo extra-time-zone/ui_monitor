@@ -13,13 +13,13 @@ from state import MatchStateStore
 
 
 class LiveMonitor:
-    def __init__(self, settings, browser_manager, alerts, screenshotter):
+    def __init__(self, settings, browser_manager, alerts, screenshotter, deduper=None):
         self.settings = settings
         self.browser_manager = browser_manager
         self.alerts = alerts
         self.screenshotter = screenshotter
+        self.deduper = deduper
         self.state = MatchStateStore("live")
-        self.seen_alerts = set()
         self.count_mismatch_rounds = 0
         self.market_down_rounds = 0
         self.empty_page_rounds = 0
@@ -57,7 +57,12 @@ class LiveMonitor:
         page.wait_for_timeout(3000)
 
         counts = get_page_counts(page)
-        matches = collect_all_matches(page)
+        matches = collect_all_matches(
+            page,
+            max_scrolls=self.settings.collect_max_scrolls,
+            stable_round_limit=self.settings.collect_stable_rounds,
+            scroll_wait_ms=self.settings.collect_scroll_wait_ms,
+        )
         current_ids = set()
 
         top_count = counts["top_live_count"]
@@ -101,11 +106,10 @@ class LiveMonitor:
                 continue
 
             display_period = match.get("period") or match.get("scheduled_time") or ""
-            key = f"{match_id}:{reason}:{match.get('minutes')}:{display_period}"
-            if key in self.seen_alerts:
+            key = self._alert_key(match, reason, display_period)
+            if not self._should_send_alert_key(key, now):
                 continue
 
-            self.seen_alerts.add(key)
             shot_path = self.screenshotter.save(
                 page,
                 match_id,
@@ -249,6 +253,27 @@ class LiveMonitor:
             return False
         self.system_alerted_dates[key] = today
         return True
+
+    def _should_send_alert_key(self, key, now):
+        if self.deduper is None:
+            return True
+        return self.deduper.should_alert(key, now)
+
+    @staticmethod
+    def _alert_key(match, reason, display_period):
+        match_id = match["match_id"]
+        if reason.startswith("over_"):
+            return f"live:{match_id}:over_limit:{reason}"
+        if reason in {
+            "reappeared_match",
+            "new_match_late_insert",
+            "negative_match_time",
+            "missing_status_field",
+        }:
+            return f"live:{match_id}:{reason}"
+        if reason == "stale_scheduled_match":
+            return f"live:{match_id}:{reason}:{display_period}"
+        return f"live:{match_id}:{reason}"
 
     @staticmethod
     def _print_match(match):

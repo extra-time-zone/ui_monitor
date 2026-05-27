@@ -57,11 +57,14 @@ class Settings:
     live_check_interval: int = 15
 
     missing_threshold: int = 3
-    reappear_alert_seconds: int = 60
+    reappear_alert_seconds: int = 180
     market_down_threshold: int = 3
     count_mismatch_threshold: int = 3
     scheduled_stale_grace_minutes: int = 5
     live_empty_page_threshold: int = 3
+    collect_max_scrolls: int = 100
+    collect_stable_rounds: int = 12
+    collect_scroll_wait_ms: int = 650
 
     sport_ids: List[str] = field(default_factory=lambda: ["6046"])
     today_sport_ids_source: str = "top"
@@ -70,13 +73,15 @@ class Settings:
     today_start_grace_minutes: int = 5
     today_market_down_threshold: int = 3
     today_empty_page_threshold: int = 3
-    today_missing_threshold: int = 3
-    today_reappear_alert_seconds: int = 60
+    today_missing_threshold: int = 5
+    today_reappear_alert_seconds: int = 180
 
     match_expire_seconds: int = 604800
     screenshot_expire_seconds: int = 604800
+    alert_dedupe_ttl_seconds: int = 604800
     browser_recycle_seconds: int = 86400
     screenshot_dir: str = os.path.join(BASE_DIR, "screenshots")
+    alert_dedupe_file: str = os.path.join(BASE_DIR, "screenshots", "alert_dedupe.json")
 
     viewport_width: int = 1920
     viewport_height: int = 1200
@@ -121,11 +126,14 @@ def load_settings() -> Settings:
         new_match_alert_minutes=env_int("NEW_MATCH_ALERT_MINUTES", 30),
         live_check_interval=env_int("LIVE_CHECK_INTERVAL", check_interval),
         missing_threshold=env_int("MISSING_THRESHOLD", 3),
-        reappear_alert_seconds=env_int("REAPPEAR_ALERT_SECONDS", 60),
+        reappear_alert_seconds=env_int("REAPPEAR_ALERT_SECONDS", 180),
         market_down_threshold=env_int("MARKET_DOWN_THRESHOLD", 3),
         count_mismatch_threshold=env_int("COUNT_MISMATCH_THRESHOLD", 3),
         scheduled_stale_grace_minutes=env_int("SCHEDULED_STALE_GRACE_MINUTES", 5),
         live_empty_page_threshold=env_int("LIVE_EMPTY_PAGE_THRESHOLD", 3),
+        collect_max_scrolls=env_int("COLLECT_MAX_SCROLLS", 100),
+        collect_stable_rounds=env_int("COLLECT_STABLE_ROUNDS", 12),
+        collect_scroll_wait_ms=env_int("COLLECT_SCROLL_WAIT_MS", 650),
         sport_ids=env_list("SPORT_IDS", "6046"),
         today_sport_ids_source=os.getenv("TODAY_SPORT_IDS_SOURCE", "top").strip().lower(),
         today_top_sports_url=os.getenv(
@@ -136,12 +144,20 @@ def load_settings() -> Settings:
         today_start_grace_minutes=env_int("TODAY_START_GRACE_MINUTES", 5),
         today_market_down_threshold=env_int("TODAY_MARKET_DOWN_THRESHOLD", 3),
         today_empty_page_threshold=env_int("TODAY_EMPTY_PAGE_THRESHOLD", 3),
-        today_missing_threshold=env_int("TODAY_MISSING_THRESHOLD", 3),
-        today_reappear_alert_seconds=env_int("TODAY_REAPPEAR_ALERT_SECONDS", 60),
+        today_missing_threshold=env_int("TODAY_MISSING_THRESHOLD", 5),
+        today_reappear_alert_seconds=env_int("TODAY_REAPPEAR_ALERT_SECONDS", 180),
         match_expire_seconds=env_int("MATCH_EXPIRE_SECONDS", 604800),
         screenshot_expire_seconds=env_int("SCREENSHOT_EXPIRE_SECONDS", 604800),
+        alert_dedupe_ttl_seconds=env_int("ALERT_DEDUPE_TTL_SECONDS", 604800),
         browser_recycle_seconds=env_int("BROWSER_RECYCLE_SECONDS", 86400),
         screenshot_dir=os.getenv("SCREENSHOT_DIR", os.path.join(BASE_DIR, "screenshots")),
+        alert_dedupe_file=os.getenv(
+            "ALERT_DEDUPE_FILE",
+            os.path.join(
+                os.getenv("SCREENSHOT_DIR", os.path.join(BASE_DIR, "screenshots")),
+                "alert_dedupe.json",
+            ),
+        ),
         viewport_width=env_int("VIEWPORT_WIDTH", 1920),
         viewport_height=env_int("VIEWPORT_HEIGHT", 1200),
         user_agent=os.getenv("USER_AGENT", default_user_agent),
