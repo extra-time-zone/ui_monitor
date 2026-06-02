@@ -57,6 +57,24 @@ class MatchStateStore:
                     flush=True,
                 )
 
+    def pending_disappearance_ids(self, current_ids, missing_threshold: int):
+        return [
+            match_id
+            for match_id, state in self.states.items()
+            if match_id not in current_ids
+            and state.get("visible") is True
+            and state.get("missing_count", 0) + 1 >= missing_threshold
+        ]
+
+    def mark_present_ids(self, match_ids, now: float):
+        for match_id in match_ids:
+            state = self.states.get(match_id)
+            if not state:
+                continue
+            state["visible"] = True
+            state["last_seen"] = now
+            state["missing_count"] = 0
+
     def cleanup_old(self, expire_seconds: int):
         now = time.time()
         expired = [

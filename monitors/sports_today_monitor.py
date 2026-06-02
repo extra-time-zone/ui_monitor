@@ -146,11 +146,27 @@ class SportsTodayMonitor:
                 self.alerts.send_match_alert(match, reason, shot_path, extra)
                 self._print_alert(match, reason, shot_path)
 
-            store.mark_missing(
+            pending_disappearance_ids = store.pending_disappearance_ids(
                 current_ids,
                 self.settings.today_missing_threshold,
-                now,
             )
+            if pending_disappearance_ids:
+                verified_present_ids = self._recheck_present_ids(
+                    sport_id,
+                    name,
+                    pending_disappearance_ids,
+                )
+                if verified_present_ids:
+                    print(
+                        f"[TODAY RECHECK] sport_id={sport_id} recovered="
+                        f"{len(verified_present_ids)} ids="
+                        f"{','.join(sorted(verified_present_ids)[:10])}",
+                        flush=True,
+                    )
+                    current_ids.update(verified_present_ids)
+                    store.mark_present_ids(verified_present_ids, now)
+
+            store.mark_missing(current_ids, self.settings.today_missing_threshold, now)
             store.cleanup_old(self.settings.match_expire_seconds)
             print("========================================\n", flush=True)
 
@@ -166,6 +182,48 @@ class SportsTodayMonitor:
             f"https://gotobet.com/en/sports/{sport_id}"
             f"?from={from_ms}&to={to_ms}"
         )
+
+    def _recheck_present_ids(self, sport_id, name, target_ids):
+        target_ids = {str(match_id) for match_id in target_ids}
+        if not target_ids:
+            return set()
+
+        url = self._today_url(sport_id)
+        page = self.browser_manager.new_page()
+        try:
+            print(
+                f"[TODAY RECHECK] sport_id={sport_id} targets={len(target_ids)}",
+                flush=True,
+            )
+            page.goto(url, wait_until="domcontentloaded", timeout=120000)
+            page.wait_for_timeout(5000)
+            matches = collect_all_matches(
+                page,
+                sport_id=sport_id,
+                sport_name=name,
+                max_scrolls=max(self.settings.collect_max_scrolls, 120),
+                stable_round_limit=max(self.settings.collect_stable_rounds, 14),
+                scroll_wait_ms=max(self.settings.collect_scroll_wait_ms, 800),
+            )
+            collected_ids = {match["match_id"] for match in matches}
+            found = target_ids & collected_ids
+            print(
+                f"[TODAY RECHECK] sport_id={sport_id} parsed={len(collected_ids)} "
+                f"found={len(found)}",
+                flush=True,
+            )
+            return found
+        except Exception as exc:
+            print(
+                f"[TODAY RECHECK] sport_id={sport_id} failed: {exc}",
+                flush=True,
+            )
+            return set()
+        finally:
+            try:
+                page.close()
+            except Exception:
+                pass
 
     def _check_all_markets_down(
         self,
