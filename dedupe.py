@@ -10,12 +10,18 @@ class PersistentAlertDeduper:
         self.ttl_seconds = ttl_seconds
         self.items = self._load()
 
-    def should_alert(self, key: str, now: Optional[float] = None) -> bool:
+    def should_alert(
+        self,
+        key: str,
+        now: Optional[float] = None,
+        ttl_seconds: Optional[int] = None,
+    ) -> bool:
         current = now or time.time()
+        ttl = ttl_seconds or self.ttl_seconds
         self.cleanup(current)
 
         last_seen = self.items.get(key)
-        if last_seen and current - last_seen < self.ttl_seconds:
+        if last_seen and current - last_seen < ttl:
             return False
 
         self.items[key] = current

@@ -10,6 +10,7 @@ from monitors.live_monitor import LiveMonitor
 from monitors.market_outcome_monitor import MarketOutcomeMonitor
 from monitors.product_both_monitor import ProductBothMonitor
 from monitors.sports_today_monitor import SportsTodayMonitor
+from monitors.tournament_name_monitor import TournamentNameMonitor
 from screenshot import Screenshotter, cleanup_old_screenshots
 
 
@@ -35,6 +36,11 @@ def main():
     print(
         f"[APP] live product rules detail monitor enabled="
         f"{settings.enable_live_product_rules_monitor}",
+        flush=True,
+    )
+    print(
+        f"[APP] tournament name monitor enabled="
+        f"{settings.enable_tournament_name_monitor}",
         flush=True,
     )
 
@@ -76,6 +82,15 @@ def main():
                 }
             )
             print("[APP] live product rules monitor enabled", flush=True)
+        if settings.enable_tournament_name_monitor:
+            scheduled_monitors.append(
+                {
+                    "name": "tournament_name",
+                    "monitor": TournamentNameMonitor(settings, alerts, deduper),
+                    "next_at": 0.0,
+                }
+            )
+            print("[APP] tournament name monitor enabled", flush=True)
 
         next_cleanup_at = 0.0
 

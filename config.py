@@ -112,6 +112,22 @@ class Settings:
     product_rules_interval: int = 60
     product_rules_max_pages: int = 1
 
+    enable_tournament_name_monitor: bool = False
+    tournament_name_interval: int = 300
+    tournament_name_endpoints: List[str] = field(
+        default_factory=lambda: [
+            "tournament_hot",
+            "match_ao_vivo",
+            "match_melhores_partidas",
+            "match_search",
+            "match_hot",
+            "menu_breadcrumb",
+        ]
+    )
+    tournament_name_statuses: List[str] = field(default_factory=lambda: ["1", "2"])
+    tournament_name_max_breadcrumb_items: int = 200
+    tournament_name_max_alert_items: int = 50
+
 
 def load_settings() -> Settings:
     load_dotenv()
@@ -197,6 +213,24 @@ def load_settings() -> Settings:
         product_rules_max_pages=env_int(
             "PRODUCT_RULES_MAX_PAGES",
             env_int("PRODUCT_BOTH_MAX_PAGES", 1),
+        ),
+        enable_tournament_name_monitor=env_bool(
+            "ENABLE_TOURNAMENT_NAME_MONITOR",
+            False,
+        ),
+        tournament_name_interval=env_int("TOURNAMENT_NAME_INTERVAL", 300),
+        tournament_name_endpoints=env_list(
+            "TOURNAMENT_NAME_ENDPOINTS",
+            "tournament_hot,match_ao_vivo,match_melhores_partidas,match_search,match_hot,menu_breadcrumb",
+        ),
+        tournament_name_statuses=env_list("TOURNAMENT_NAME_STATUSES", "1,2"),
+        tournament_name_max_breadcrumb_items=env_int(
+            "TOURNAMENT_NAME_MAX_BREADCRUMB_ITEMS",
+            200,
+        ),
+        tournament_name_max_alert_items=env_int(
+            "TOURNAMENT_NAME_MAX_ALERT_ITEMS",
+            50,
         ),
     )
 
